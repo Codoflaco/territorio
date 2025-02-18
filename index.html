@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Territorio COngregación Nuevo Paraíso</title>
+    <title>Mapa Personalizado de Google My Maps</title>
     <style>
         body {
             font-family: Arial, sans-serif;
@@ -16,7 +16,7 @@
             background-color: #f0f0f0;
         }
         #map-container {
-            width: 80%;
+            width: 100%;
             max-width: 800px;
             box-shadow: 0 0 10px rgba(0,0,0,0.1);
         }
@@ -25,11 +25,21 @@
             height: 600px;
             border: none;
         }
+        @media (max-width: 600px) {
+            #map-container {
+                width: 100%;
+                height: 100vh;
+                max-width: 100%;
+            }
+            iframe {
+                height: 100%;
+            }
+        }
     </style>
 </head>
 <body>
     <div id="map-container">
-        <iframe src="https://www.google.com/maps/d/u/0/embed?mid=1aHOCZ8v1RDXfgO6hx1rsqluD2HlaPj0&ehbc=2E312F&noprof=1" width="640" height="480"></iframe>
+        <iframe src="https://www.google.com/maps/d/u/0/embed?mid=1aHOCZ8v1RDXfgO6hx1rsqluD2HlaPj0&ehbc=2E312F" allowfullscreen></iframe>
     </div>
 </body>
 </html>
