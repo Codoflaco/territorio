@@ -2,78 +2,145 @@
 <html>
 <head>
   <title>Monitor de Audio MUPPET</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <style>
     .meter {
       width: 80%; height: 30px;
-      border: 1px solid #ccc;
+      border: 1px solid #333;
       margin: 20px auto;
+      background: #f1f1f1;
     }
     .level {
       height: 100%;
-      background: #4CAF50;
+      background: linear-gradient(to right, #4CAF50, #8BC34A);
       width: 0%;
+      transition: width 0.1s;
+    }
+    #status {
+      margin: 10px;
+      padding: 8px;
+      border-radius: 4px;
     }
   </style>
 </head>
 <body>
-  <h1>Monitor de Audio</h1>
+  <h1>Monitor de Audio MUPPET</h1>
   <div class="meter">
     <div id="audioLevel" class="level"></div>
   </div>
   <div id="value">0%</div>
+  <div id="status">Desconectado</div>
   <button id="startBtn">Iniciar Micrófono</button>
-  
+
   <script>
     const startBtn = document.getElementById('startBtn');
     const audioLevel = document.getElementById('audioLevel');
     const valueDisplay = document.getElementById('value');
+    const statusDiv = document.getElementById('status');
     let isRunning = false;
+    let espIp = "192.168.4.1"; // IP del ESP8266
+
+    // Función para probar conexión con el ESP
+    async function checkESPConnection() {
+      try {
+        const response = await fetch(`http://${espIp}/api/ping`, {
+          mode: 'no-cors' // Importante para evitar problemas CORS
+        });
+        return true;
+      } catch (err) {
+        console.error("Error conectando al ESP:", err);
+        return false;
+      }
+    }
+
+    // Función para enviar datos al ESP
+    async function sendToESP(level) {
+      try {
+        await fetch(`http://${espIp}/api/level?value=${level}`, {
+          mode: 'no-cors'
+        });
+      } catch (err) {
+        console.error("Error enviando datos:", err);
+      }
+    }
 
     startBtn.addEventListener('click', async () => {
-      try {
-        const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
-        const audioContext = new AudioContext();
-        const analyser = audioContext.createAnalyser();
-        const microphone = audioContext.createMediaStreamSource(stream);
-        microphone.connect(analyser);
-        
-        analyser.fftSize = 32;
-        const dataArray = new Uint8Array(analyser.frequencyBinCount);
-        
-        function sendDataToESP(level) {
-          // Enviar datos al ESP8266 (ajusta la IP)
-          fetch('http://192.168.4.1/data?level=' + level)
-            .catch(err => console.log("Error enviando datos:", err));
+      if (!isRunning) {
+        // Verificar conexión con el ESP
+        const isConnected = await checkESPConnection();
+        if (!isConnected) {
+          statusDiv.textContent = "Error: No se puede conectar al dispositivo MUPPET";
+          statusDiv.style.background = "#ffebee";
+          return;
         }
 
-        function processAudio() {
-          analyser.getByteFrequencyData(dataArray);
-          let sum = dataArray.reduce((a, b) => a + b, 0);
-          let average = sum / dataArray.length;
-          let percentage = Math.min(100, Math.round(average / 255 * 100));
+        try {
+          // Acceder al micrófono
+          const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+          const audioContext = new (window.AudioContext || window.webkitAudioContext)();
+          const analyser = audioContext.createAnalyser();
+          analyser.fftSize = 32;
           
-          audioLevel.style.width = percentage + '%';
-          valueDisplay.textContent = percentage + '%';
-          sendDataToESP(percentage);
+          const microphone = audioContext.createMediaStreamSource(stream);
+          microphone.connect(analyser);
           
-          if(isRunning) requestAnimationFrame(processAudio);
+          isRunning = true;
+          startBtn.textContent = "Detener Micrófono";
+          statusDiv.textContent = "Conectado a MUPPET";
+          statusDiv.style.background = "#e8f5e9";
+
+          function processAudio() {
+            const dataArray = new Uint8Array(analyser.frequencyBinCount);
+            analyser.getByteFrequencyData(dataArray);
+            
+            let sum = dataArray.reduce((a, b) => a + b, 0);
+            let average = sum / dataArray.length;
+            let percentage = Math.min(100, Math.round(average / 255 * 100));
+            
+            // Actualizar interfaz
+            audioLevel.style.width = percentage + '%';
+            valueDisplay.textContent = percentage + '%';
+            
+            // Enviar datos al ESP8266
+            sendToESP(percentage);
+            
+            if (isRunning) requestAnimationFrame(processAudio);
+          }
+          
+          processAudio();
+
+          // Configurar botón para detener
+          startBtn.onclick = () => {
+            isRunning = false;
+            stream.getTracks().forEach(track => track.stop());
+            startBtn.textContent = "Iniciar Micrófono";
+            statusDiv.textContent = "Desconectado";
+            statusDiv.style.background = "#ffebee";
+            startBtn.onclick = startBtn.addEventListener('click', arguments.callee);
+          };
+
+        } catch (err) {
+          console.error("Error al acceder al micrófono:", err);
+          statusDiv.textContent = "Error: " + err.message;
+          statusDiv.style.background = "#ffebee";
         }
-        
-        isRunning = true;
-        processAudio();
-        startBtn.textContent = "Detener Micrófono";
-        startBtn.onclick = () => {
-          isRunning = false;
-          stream.getTracks().forEach(track => track.stop());
-          startBtn.textContent = "Iniciar Micrófono";
-          startBtn.onclick = startBtn.addEventListener('click', arguments.callee);
-        };
-        
-      } catch(err) {
-        console.error("Error:", err);
-        alert("No se pudo acceder al micrófono: " + err.message);
       }
     });
+
+    // Detectar automáticamente al ESP (opcional)
+    async function autoDetectESP() {
+      try {
+        const response = await fetch('http://muppet.local/api/ping', {
+          mode: 'no-cors'
+        });
+        espIp = "muppet.local";
+        statusDiv.textContent = "Dispositivo MUPPET detectado";
+      } catch (err) {
+        console.log("Usando dirección IP por defecto");
+      }
+    }
+    
+    autoDetectESP();
   </script>
 </body>
 </html>
