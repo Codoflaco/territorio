@@ -1,45 +1,79 @@
 <!DOCTYPE html>
-<html lang="es">
+<html>
 <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Territorio Congregación Nuevo Paraíso</title>
-    <style>
-        body {
-            font-family: Arial, sans-serif;
-            margin: 0;
-            padding: 0;
-            display: flex;
-            justify-content: center;
-            align-items: center;
-            height: 100vh;
-            background-color: #f0f0f0;
-        }
-        #map-container {
-            width: 100%;
-            max-width: 800px;
-            box-shadow: 0 0 10px rgba(0,0,0,0.1);
-        }
-        iframe {
-            width: 100%;
-            height: 600px;
-            border: none;
-        }
-        @media (max-width: 600px) {
-            #map-container {
-                width: 100%;
-                height: 100vh;
-                max-width: 100%;
-            }
-            iframe {
-                height: 100%;
-            }
-        }
-    </style>
+  <title>Monitor de Audio MUPPET</title>
+  <style>
+    .meter {
+      width: 80%; height: 30px;
+      border: 1px solid #ccc;
+      margin: 20px auto;
+    }
+    .level {
+      height: 100%;
+      background: #4CAF50;
+      width: 0%;
+    }
+  </style>
 </head>
 <body>
-    <div id="map-container">
-       <iframe src="https://www.google.com/maps/d/u/0/embed?mid=1-JbMJn_mwW4GyF0y9fu8y_sFlsnx1mI&ehbc=2E312F" width="640" height="480"></iframe>
-    </div>
+  <h1>Monitor de Audio</h1>
+  <div class="meter">
+    <div id="audioLevel" class="level"></div>
+  </div>
+  <div id="value">0%</div>
+  <button id="startBtn">Iniciar Micrófono</button>
+  
+  <script>
+    const startBtn = document.getElementById('startBtn');
+    const audioLevel = document.getElementById('audioLevel');
+    const valueDisplay = document.getElementById('value');
+    let isRunning = false;
+
+    startBtn.addEventListener('click', async () => {
+      try {
+        const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+        const audioContext = new AudioContext();
+        const analyser = audioContext.createAnalyser();
+        const microphone = audioContext.createMediaStreamSource(stream);
+        microphone.connect(analyser);
+        
+        analyser.fftSize = 32;
+        const dataArray = new Uint8Array(analyser.frequencyBinCount);
+        
+        function sendDataToESP(level) {
+          // Enviar datos al ESP8266 (ajusta la IP)
+          fetch('http://192.168.4.1/data?level=' + level)
+            .catch(err => console.log("Error enviando datos:", err));
+        }
+
+        function processAudio() {
+          analyser.getByteFrequencyData(dataArray);
+          let sum = dataArray.reduce((a, b) => a + b, 0);
+          let average = sum / dataArray.length;
+          let percentage = Math.min(100, Math.round(average / 255 * 100));
+          
+          audioLevel.style.width = percentage + '%';
+          valueDisplay.textContent = percentage + '%';
+          sendDataToESP(percentage);
+          
+          if(isRunning) requestAnimationFrame(processAudio);
+        }
+        
+        isRunning = true;
+        processAudio();
+        startBtn.textContent = "Detener Micrófono";
+        startBtn.onclick = () => {
+          isRunning = false;
+          stream.getTracks().forEach(track => track.stop());
+          startBtn.textContent = "Iniciar Micrófono";
+          startBtn.onclick = startBtn.addEventListener('click', arguments.callee);
+        };
+        
+      } catch(err) {
+        console.error("Error:", err);
+        alert("No se pudo acceder al micrófono: " + err.message);
+      }
+    });
+  </script>
 </body>
 </html>
